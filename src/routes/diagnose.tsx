@@ -1,5 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useRef, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { getSessionId } from "@/lib/session";
+import {
+  FAKE_BOTTLENECK_RESULT,
+  FAKE_PARSED_SPECS,
+  FAKE_PERCENTILE_RANK,
+  FAKE_RANK_GRADE,
+} from "@/lib/fake-diagnosis";
 
 export const Route = createFileRoute("/diagnose")({
   head: () => ({
@@ -20,15 +28,73 @@ function Diagnose() {
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const onSelectFile = useCallback((f: File | null | undefined) => {
-    if (f) setFile(f);
+    if (f) {
+      setFile(f);
+      setError(null);
+    }
   }, []);
 
-  const startDiagnose = () => {
+  const startDiagnose = async () => {
     if (!file) return;
     setLoading(true);
-    setTimeout(() => navigate({ to: "/result" }), 1500);
+    setError(null);
+
+    try {
+      const sessionId = getSessionId();
+
+      // 1. Upload file to Storage
+      const path = `${sessionId}/${Date.now()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from("dxdiag-files")
+        .upload(path, file, {
+          contentType: "text/plain",
+          upsert: false,
+        });
+      if (uploadError) throw uploadError;
+
+      const { data: pub } = supabase.storage
+        .from("dxdiag-files")
+        .getPublicUrl(path);
+      const fileUrl = pub.publicUrl;
+
+      // 2. Insert diagnosis row (fake analysis for now)
+      const { data: diagnosis, error: insertError } = await supabase
+        .from("diagnoses")
+        .insert({
+          session_id: sessionId,
+          diagnosis_type: "quick",
+          parsed_specs: FAKE_PARSED_SPECS,
+          bottleneck_result: FAKE_BOTTLENECK_RESULT,
+          percentile_rank: FAKE_PERCENTILE_RANK,
+          rank_grade: FAKE_RANK_GRADE,
+        })
+        .select("id")
+        .single();
+      if (insertError) throw insertError;
+
+      // 3. Insert input file reference
+      const { error: inputError } = await supabase
+        .from("diagnosis_inputs")
+        .insert({
+          diagnosis_id: diagnosis.id,
+          input_type: "dxdiag",
+          file_url: fileUrl,
+        });
+      if (inputError) throw inputError;
+
+      // Brief UX delay so the loading state is visible
+      setTimeout(
+        () => navigate({ to: "/result/$id", params: { id: diagnosis.id } }),
+        500,
+      );
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "진단 중 오류가 발생했습니다";
+      setError(message);
+      setLoading(false);
+    }
   };
 
   return (
@@ -107,6 +173,12 @@ function Diagnose() {
               "진단 시작하기"
             )}
           </button>
+
+          {error && (
+            <p className="mt-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground">
+              {error}
+            </p>
+          )}
         </section>
 
         {/* Instructions */}

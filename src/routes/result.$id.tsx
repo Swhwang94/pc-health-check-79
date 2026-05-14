@@ -1,7 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import type {
+  BottleneckResult,
+  ParsedSpecs,
+  Recommendation,
+} from "@/lib/fake-diagnosis";
 
-export const Route = createFileRoute("/result")({
+export const Route = createFileRoute("/result/$id")({
   head: () => ({
     meta: [
       { title: "진단 결과 — PCFixer" },
@@ -11,32 +18,22 @@ export const Route = createFileRoute("/result")({
   component: Result,
 });
 
-const specs = [
-  { label: "CPU", value: "Intel Core i7-12700K" },
-  { label: "GPU", value: "NVIDIA GeForce RTX 3080" },
-  { label: "RAM", value: "16 GB" },
-];
-
-const upgrades = [
-  {
-    rank: 1,
-    name: "DDR4 32GB (16GB×2) 3600MHz",
-    reason: "가장 효율적인 업그레이드. 모든 작업의 응답성이 즉시 개선됩니다.",
-  },
-  {
-    rank: 2,
-    name: "NVMe SSD 1TB",
-    reason: "로딩 시간 감소 및 시스템 응답성 향상.",
-  },
-  {
-    rank: 3,
-    name: "수랭 쿨러",
-    reason: "장시간 작업 시 성능 저하 방지.",
-  },
-];
-
 function Result() {
+  const { id } = Route.useParams();
   const [copied, setCopied] = useState(false);
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["diagnosis", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("diagnoses")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const copyLink = async () => {
     try {
@@ -47,6 +44,41 @@ function Result() {
       /* noop */
     }
   };
+
+  if (isLoading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center text-muted-foreground">
+        진단 결과 불러오는 중...
+      </main>
+    );
+  }
+
+  if (isError || !data) {
+    return (
+      <main className="mx-auto max-w-xl px-6 py-20 text-center">
+        <h1 className="text-2xl font-bold">진단 결과를 찾을 수 없습니다</h1>
+        <p className="mt-3 text-muted-foreground">
+          링크가 잘못되었거나 결과가 삭제되었을 수 있어요.
+        </p>
+        <Link
+          to="/diagnose"
+          className="mt-8 inline-block rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground"
+        >
+          새 진단 시작하기
+        </Link>
+      </main>
+    );
+  }
+
+  const parsed = (data.parsed_specs ?? {}) as Partial<ParsedSpecs>;
+  const bottleneck = (data.bottleneck_result ?? {}) as Partial<BottleneckResult>;
+  const recs: Recommendation[] = bottleneck.recommendations ?? [];
+
+  const specs = [
+    { label: "CPU", value: parsed.CPU ?? "-" },
+    { label: "GPU", value: parsed.GPU ?? "-" },
+    { label: "RAM", value: parsed.RAM ?? "-" },
+  ];
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
@@ -71,12 +103,12 @@ function Result() {
             <p className="mt-2 text-5xl font-bold tracking-tight md:text-6xl">
               상위{" "}
               <span className="bg-gradient-to-r from-primary to-[var(--accent2)] bg-clip-text text-transparent">
-                35%
+                {data.percentile_rank ?? "-"}%
               </span>
             </p>
           </div>
           <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-[var(--success)]/15 text-5xl font-bold text-[var(--success)] ring-2 ring-[var(--success)]/30">
-            B
+            {data.rank_grade ?? "?"}
           </div>
         </div>
       </section>
@@ -104,44 +136,46 @@ function Result() {
           AI 병목 진단
         </p>
         <h2 className="mt-3 text-3xl font-bold tracking-tight">
-          <span className="text-primary">RAM</span>이 병목입니다
+          <span className="text-primary">{bottleneck.bottleneck_part ?? "-"}</span>
+          이 병목입니다
         </h2>
         <p className="mt-4 leading-relaxed text-muted-foreground">
-          현재 16GB RAM은 최신 게임 권장 사양 대비 부족합니다. CPU와 GPU 성능을
-          충분히 활용하지 못하고 있습니다.
+          {bottleneck.reason ?? ""}
         </p>
       </section>
 
       {/* Upgrades */}
-      <section className="mt-8">
-        <h2 className="text-xl font-bold tracking-tight">업그레이드 추천</h2>
-        <div className="mt-4 space-y-3">
-          {upgrades.map((u) => (
-            <div
-              key={u.rank}
-              className="flex gap-5 rounded-xl border border-border bg-card/50 p-5 transition hover:border-primary/40"
-            >
+      {recs.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-xl font-bold tracking-tight">업그레이드 추천</h2>
+          <div className="mt-4 space-y-3">
+            {recs.map((u) => (
               <div
-                className={`flex h-12 w-12 flex-none items-center justify-center rounded-lg text-lg font-bold ${
-                  u.rank === 1
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-foreground"
-                }`}
+                key={u.rank}
+                className="flex gap-5 rounded-xl border border-border bg-card/50 p-5 transition hover:border-primary/40"
               >
-                {u.rank}
+                <div
+                  className={`flex h-12 w-12 flex-none items-center justify-center rounded-lg text-lg font-bold ${
+                    u.rank === 1
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-foreground"
+                  }`}
+                >
+                  {u.rank}
+                </div>
+                <div>
+                  <p className="text-base font-semibold text-foreground">
+                    {u.name}
+                  </p>
+                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                    {u.reason}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-base font-semibold text-foreground">
-                  {u.name}
-                </p>
-                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                  {u.reason}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="mt-10 flex justify-center">
         <button
