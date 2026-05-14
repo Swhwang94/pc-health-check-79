@@ -2,7 +2,7 @@ export const FAKE_PARSED_SPECS = {
   CPU: "Intel Core i7-12700K",
   GPU: "NVIDIA GeForce RTX 3080",
   RAM: "16 GB",
-} as const;
+};
 
 export const FAKE_BOTTLENECK_RESULT = {
   bottleneck_part: "RAM",
@@ -25,7 +25,7 @@ export const FAKE_BOTTLENECK_RESULT = {
       reason: "장시간 작업 시 성능 저하 방지.",
     },
   ],
-} as const;
+};
 
 export const FAKE_PERCENTILE_RANK = 35;
 export const FAKE_RANK_GRADE = "B";
