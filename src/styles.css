@@ -62,9 +62,17 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
+  --radius: 0.75rem;
+  --background: oklch(0.13 0.02 280);
+  --foreground: oklch(0.98 0.005 280);
+  --brand: oklch(0.62 0.19 280);
+  --brand-foreground: oklch(0.98 0.005 280);
+  --accent2: oklch(0.82 0.14 200);
+  --success: oklch(0.74 0.17 155);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-accent2: var(--accent2);
+  --color-success: var(--success);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.129 0.042 264.695);
   --popover: oklch(1 0 0);
