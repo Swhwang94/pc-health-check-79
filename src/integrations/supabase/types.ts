@@ -14,7 +14,107 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      diagnoses: {
+        Row: {
+          bottleneck_result: Json | null
+          created_at: string
+          diagnosis_type: string
+          id: string
+          parsed_specs: Json | null
+          percentile_rank: number | null
+          rank_grade: string | null
+          session_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          bottleneck_result?: Json | null
+          created_at?: string
+          diagnosis_type: string
+          id?: string
+          parsed_specs?: Json | null
+          percentile_rank?: number | null
+          rank_grade?: string | null
+          session_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          bottleneck_result?: Json | null
+          created_at?: string
+          diagnosis_type?: string
+          id?: string
+          parsed_specs?: Json | null
+          percentile_rank?: number | null
+          rank_grade?: string | null
+          session_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      diagnosis_inputs: {
+        Row: {
+          created_at: string
+          diagnosis_id: string
+          file_url: string
+          id: string
+          input_type: string
+        }
+        Insert: {
+          created_at?: string
+          diagnosis_id: string
+          file_url: string
+          id?: string
+          input_type: string
+        }
+        Update: {
+          created_at?: string
+          diagnosis_id?: string
+          file_url?: string
+          id?: string
+          input_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "diagnosis_inputs_diagnosis_id_fkey"
+            columns: ["diagnosis_id"]
+            isOneToOne: false
+            referencedRelation: "diagnoses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      parts: {
+        Row: {
+          aliases: string[] | null
+          benchmark_score: number | null
+          brand: string | null
+          category: string
+          created_at: string
+          id: string
+          name: string
+          specs: Json | null
+        }
+        Insert: {
+          aliases?: string[] | null
+          benchmark_score?: number | null
+          brand?: string | null
+          category: string
+          created_at?: string
+          id?: string
+          name: string
+          specs?: Json | null
+        }
+        Update: {
+          aliases?: string[] | null
+          benchmark_score?: number | null
+          brand?: string | null
+          category?: string
+          created_at?: string
+          id?: string
+          name?: string
+          specs?: Json | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
