@@ -4,9 +4,11 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useNavigate,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
+import { AuthProvider, useAuth } from "@/contexts/auth";
 
 import appCss from "../styles.css?url";
 
@@ -67,6 +69,51 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
+function UserMenu() {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  if (!user) {
+    return (
+      <Link
+        to="/auth"
+        className="rounded-lg border border-border bg-card/50 px-3 py-1.5 text-sm font-medium text-foreground transition hover:bg-card hover:border-primary/40"
+      >
+        로그인
+      </Link>
+    );
+  }
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate({ to: "/" });
+  };
+
+  return (
+    <button
+      onClick={handleSignOut}
+      className="rounded-lg border border-border bg-card/50 px-3 py-1.5 text-sm font-medium text-foreground transition hover:bg-card hover:border-primary/40"
+    >
+      로그아웃
+    </button>
+  );
+}
+
+function SiteNav() {
+  return (
+    <nav className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border/60 bg-background/80 px-6 backdrop-blur-md">
+      <Link
+        to="/"
+        className="text-base font-bold tracking-tight"
+      >
+        <span className="text-primary">PC</span>
+        <span className="text-foreground">Fixer</span>
+      </Link>
+      <UserMenu />
+    </nav>
+  );
+}
+
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
     meta: [
@@ -96,7 +143,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="ko">
       <head>
         <HeadContent />
       </head>
@@ -113,7 +160,10 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet />
+      <AuthProvider>
+        <SiteNav />
+        <Outlet />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

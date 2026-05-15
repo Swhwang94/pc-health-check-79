@@ -6,6 +6,7 @@ import { isDxdiagSpecsUsable, parseDxdiagSpecs } from "@/lib/dxdiag-parse";
 import { analyzeBottleneckFromParsedSpecs } from "@/lib/gemini";
 import type { BottleneckResult } from "@/lib/fake-diagnosis";
 import { computePercentileAndGradeFromParts } from "@/lib/rank-percentile";
+import { useAuth } from "@/contexts/auth";
 
 export const Route = createFileRoute("/diagnose")({
   head: () => ({
@@ -22,6 +23,7 @@ export const Route = createFileRoute("/diagnose")({
 
 function Diagnose() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -82,6 +84,7 @@ function Diagnose() {
         .from("diagnoses")
         .insert({
           session_id: sessionId,
+          user_id: user?.id ?? null,
           diagnosis_type: "quick",
           parsed_specs,
           bottleneck_result,

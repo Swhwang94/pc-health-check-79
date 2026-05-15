@@ -21,13 +21,8 @@ export const Route = createFileRoute("/")({
 
 function Home() {
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center px-6 text-center">
+    <main className="relative flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center px-6 text-center">
       <div className="absolute left-1/2 top-1/3 -z-10 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/20 blur-[120px]" />
-
-      <div className="absolute top-8 text-lg font-semibold tracking-tight">
-        <span className="text-primary">PC</span>
-        <span className="text-foreground">Fixer</span>
-      </div>
 
       <h1 className="max-w-3xl text-5xl font-bold leading-tight tracking-tight md:text-6xl">
         내 PC, 지금{" "}
