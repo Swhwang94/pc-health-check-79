@@ -2,11 +2,36 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type {
-  BottleneckResult,
-  ParsedSpecs,
-  Recommendation,
-} from "@/lib/fake-diagnosis";
+import type { BottleneckResult, ParsedSpecs, Recommendation } from "@/lib/fake-diagnosis";
+
+type DiagnosisRow = {
+  parsed_specs?: unknown;
+  bottleneck_result?: unknown;
+  percentile_rank?: number | null;
+  rank_grade?: string | null;
+};
+
+function resolveGeminiPercentile(
+  row: DiagnosisRow,
+  bottleneck: Partial<BottleneckResult>,
+): number | null {
+  const col = row.percentile_rank;
+  if (typeof col === "number" && Number.isFinite(col)) return Math.round(col);
+  const j = bottleneck.percentile_rank;
+  if (typeof j === "number" && Number.isFinite(j)) return Math.round(j);
+  return null;
+}
+
+function resolveGeminiGrade(
+  row: DiagnosisRow,
+  bottleneck: Partial<BottleneckResult>,
+): string | null {
+  const col = row.rank_grade;
+  if (typeof col === "string" && col.trim()) return col.trim();
+  const j = bottleneck.rank_grade;
+  if (typeof j === "string" && j.trim()) return j.trim();
+  return null;
+}
 
 export const Route = createFileRoute("/result/$id")({
   head: () => ({
@@ -74,6 +99,9 @@ function Result() {
   const bottleneck = (data.bottleneck_result ?? {}) as Partial<BottleneckResult>;
   const recs: Recommendation[] = bottleneck.recommendations ?? [];
 
+  const percentileDisplay = resolveGeminiPercentile(data, bottleneck);
+  const gradeDisplay = resolveGeminiGrade(data, bottleneck);
+
   const specs = [
     { label: "CPU", value: parsed.CPU ?? "-" },
     { label: "GPU", value: parsed.GPU ?? "-" },
@@ -98,17 +126,17 @@ function Result() {
         <div className="relative flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm text-muted-foreground">
-              Steam 하드웨어 서베이 기준 · 전체 PC 유저 중
+              parts DB 벤치마크 기준 · 카탈로그 내 상대 순위 (추정)
             </p>
             <p className="mt-2 text-5xl font-bold tracking-tight md:text-6xl">
               상위{" "}
               <span className="bg-gradient-to-r from-primary to-[var(--accent2)] bg-clip-text text-transparent">
-                {data.percentile_rank ?? "-"}%
+                {percentileDisplay != null ? `${100 - percentileDisplay}` : "-"}%
               </span>
             </p>
           </div>
           <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-[var(--success)]/15 text-5xl font-bold text-[var(--success)] ring-2 ring-[var(--success)]/30">
-            {data.rank_grade ?? "?"}
+            {gradeDisplay ?? "?"}
           </div>
         </div>
       </section>
@@ -116,16 +144,11 @@ function Result() {
       {/* Specs */}
       <section className="mt-8 grid gap-4 md:grid-cols-3">
         {specs.map((s) => (
-          <div
-            key={s.label}
-            className="rounded-xl border border-border bg-card/50 p-5"
-          >
+          <div key={s.label} className="rounded-xl border border-border bg-card/50 p-5">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {s.label}
             </p>
-            <p className="mt-2 text-base font-semibold text-foreground">
-              {s.value}
-            </p>
+            <p className="mt-2 text-base font-semibold text-foreground">{s.value}</p>
           </div>
         ))}
       </section>
@@ -136,12 +159,9 @@ function Result() {
           AI 병목 진단
         </p>
         <h2 className="mt-3 text-3xl font-bold tracking-tight">
-          <span className="text-primary">{bottleneck.bottleneck_part ?? "-"}</span>
-          이 병목입니다
+          <span className="text-primary">{bottleneck.bottleneck_part ?? "-"}</span>이 병목입니다
         </h2>
-        <p className="mt-4 leading-relaxed text-muted-foreground">
-          {bottleneck.reason ?? ""}
-        </p>
+        <p className="mt-4 leading-relaxed text-muted-foreground">{bottleneck.reason ?? ""}</p>
       </section>
 
       {/* Upgrades */}
@@ -156,20 +176,14 @@ function Result() {
               >
                 <div
                   className={`flex h-12 w-12 flex-none items-center justify-center rounded-lg text-lg font-bold ${
-                    u.rank === 1
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-foreground"
+                    u.rank === 1 ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
                   }`}
                 >
                   {u.rank}
                 </div>
                 <div>
-                  <p className="text-base font-semibold text-foreground">
-                    {u.name}
-                  </p>
-                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                    {u.reason}
-                  </p>
+                  <p className="text-base font-semibold text-foreground">{u.name}</p>
+                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{u.reason}</p>
                 </div>
               </div>
             ))}

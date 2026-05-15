@@ -10,10 +10,17 @@ function uuid() {
 
 export function getSessionId(): string {
   if (typeof document === "undefined") return "";
-  const match = document.cookie
-    .split("; ")
-    .find((c) => c.startsWith(`${COOKIE_NAME}=`));
-  if (match) return decodeURIComponent(match.split("=")[1]);
+  const prefix = `${COOKIE_NAME}=`;
+  const match = document.cookie.split("; ").find((c) => c.startsWith(prefix));
+  if (match) {
+    const raw = match.slice(prefix.length);
+    try {
+      const decoded = decodeURIComponent(raw);
+      if (decoded.trim()) return decoded.trim();
+    } catch {
+      /* malformed cookie — fall through and reissue */
+    }
+  }
 
   const id = uuid();
   // 1 year

@@ -2,12 +2,10 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getSessionId } from "@/lib/session";
-import {
-  FAKE_BOTTLENECK_RESULT,
-  FAKE_PARSED_SPECS,
-  FAKE_PERCENTILE_RANK,
-  FAKE_RANK_GRADE,
-} from "@/lib/fake-diagnosis";
+import { isDxdiagSpecsUsable, parseDxdiagSpecs } from "@/lib/dxdiag-parse";
+import { analyzeBottleneckFromParsedSpecs } from "@/lib/gemini";
+import type { BottleneckResult } from "@/lib/fake-diagnosis";
+import { computePercentileAndGradeFromParts } from "@/lib/rank-percentile";
 
 export const Route = createFileRoute("/diagnose")({
   head: () => ({
@@ -43,53 +41,67 @@ function Diagnose() {
     setError(null);
 
     try {
-      const sessionId = getSessionId();
+      const dxdiagText = await file.text();
+      const parsed_specs = parseDxdiagSpecs(dxdiagText);
+      if (!isDxdiagSpecsUsable(parsed_specs)) {
+        throw new Error(
+          "dxdiag.txt에서 CPU/GPU/RAM 정보를 찾을 수 없습니다. DirectX 진단 도구에서 「모든 정보 저장」으로 만든 파일인지 확인해 주세요.",
+        );
+      }
+
+      const rawSid = getSessionId().replace(/^\/+|\/+$/g, "");
+      const sessionId = rawSid || crypto.randomUUID();
+      // Storage object key must not start with "/"; empty sessionId used to produce "/ts-name" → 400.
+      const path = `${sessionId}/${Date.now()}-dxdiag.txt`;
 
       // 1. Upload file to Storage
-      const path = `${sessionId}/${Date.now()}-${file.name}`;
       const { error: uploadError } = await supabase.storage
         .from("dxdiag-files")
         .upload(path, file, {
-          contentType: "text/plain",
+          contentType: file.type || "text/plain",
           upsert: false,
         });
       if (uploadError) throw uploadError;
 
-      const { data: pub } = supabase.storage
-        .from("dxdiag-files")
-        .getPublicUrl(path);
+      const { data: pub } = supabase.storage.from("dxdiag-files").getPublicUrl(path);
       const fileUrl = pub.publicUrl;
 
-      // 2. Insert diagnosis row (fake analysis for now)
+      const [{ bottleneck_result: aiBottleneck }, rankMeta] = await Promise.all([
+        analyzeBottleneckFromParsedSpecs(parsed_specs),
+        computePercentileAndGradeFromParts(supabase, parsed_specs),
+      ]);
+
+      const bottleneck_result: BottleneckResult = {
+        ...aiBottleneck,
+        percentile_rank: rankMeta.percentile_rank,
+        rank_grade: rankMeta.rank_grade,
+      };
+
+      // 2. Insert diagnosis row
       const { data: diagnosis, error: insertError } = await supabase
         .from("diagnoses")
         .insert({
           session_id: sessionId,
           diagnosis_type: "quick",
-          parsed_specs: FAKE_PARSED_SPECS,
-          bottleneck_result: FAKE_BOTTLENECK_RESULT,
-          percentile_rank: FAKE_PERCENTILE_RANK,
-          rank_grade: FAKE_RANK_GRADE,
+          parsed_specs,
+          bottleneck_result,
+          percentile_rank: rankMeta.percentile_rank,
+          rank_grade: rankMeta.rank_grade,
         })
         .select("id")
         .single();
       if (insertError) throw insertError;
 
       // 3. Insert input file reference
-      const { error: inputError } = await supabase
-        .from("diagnosis_inputs")
-        .insert({
-          diagnosis_id: diagnosis.id,
-          input_type: "dxdiag",
-          file_url: fileUrl,
-        });
+      const { error: inputError } = await supabase.from("diagnosis_inputs").insert({
+        diagnosis_id: diagnosis.id,
+        input_type: "dxdiag",
+        file_url: fileUrl,
+      });
       if (inputError) throw inputError;
 
       // Brief UX delay so the loading state is visible
-      setTimeout(
-        () => navigate({ to: "/result/$id", params: { id: diagnosis.id } }),
-        500,
-      );
+      setTimeout(() => navigate({ to: "/result/$id", params: { id: diagnosis.id } }), 500);
     } catch (e) {
       const message = e instanceof Error ? e.message : "진단 중 오류가 발생했습니다";
       setError(message);
@@ -140,21 +152,15 @@ function Diagnose() {
             <UploadIcon />
             {file ? (
               <>
-                <p className="mt-4 text-lg font-semibold text-foreground">
-                  {file.name}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  파일이 준비되었습니다
-                </p>
+                <p className="mt-4 text-lg font-semibold text-foreground">{file.name}</p>
+                <p className="mt-1 text-sm text-muted-foreground">파일이 준비되었습니다</p>
               </>
             ) : (
               <>
                 <p className="mt-4 text-lg font-semibold text-foreground">
                   dxdiag.txt 파일을 여기에 끌어다 놓으세요
                 </p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  또는 클릭하여 파일 선택
-                </p>
+                <p className="mt-2 text-sm text-muted-foreground">또는 클릭하여 파일 선택</p>
               </>
             )}
           </div>
@@ -183,9 +189,7 @@ function Diagnose() {
 
         {/* Instructions */}
         <section className="rounded-2xl border border-border bg-card/40 p-8">
-          <h2 className="text-xl font-bold tracking-tight">
-            dxdiag 파일 추출 방법
-          </h2>
+          <h2 className="text-xl font-bold tracking-tight">dxdiag 파일 추출 방법</h2>
           <ol className="mt-6 space-y-5">
             {[
               "윈도우 키 + R 키를 누릅니다",
@@ -197,9 +201,7 @@ function Diagnose() {
                 <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-primary/15 text-sm font-bold text-primary">
                   {i + 1}
                 </span>
-                <p className="pt-1 text-sm leading-relaxed text-muted-foreground">
-                  {step}
-                </p>
+                <p className="pt-1 text-sm leading-relaxed text-muted-foreground">{step}</p>
               </li>
             ))}
           </ol>
