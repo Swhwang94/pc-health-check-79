@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
-import type { BottleneckResult, ParsedSpecs, Recommendation } from "@/lib/fake-diagnosis";
+import type { BottleneckResult, ParsedSpecs, Recommendation } from "@/lib/diagnosis-types";
 
 const geminiBottleneckJsonSchema = z.object({
   bottleneck_part: z.string().min(1),
@@ -53,56 +53,6 @@ export function getGeminiClient(): GoogleGenerativeAI {
     geminiClient = new GoogleGenerativeAI(getGeminiApiKey());
   }
   return geminiClient;
-}
-
-export type DiagnosisReportInput = {
-  parsed_specs: Partial<ParsedSpecs>;
-  bottleneck_result: Partial<BottleneckResult>;
-};
-
-/**
- * `parsed_specs`와 `bottleneck_result`를 바탕으로 Gemini가 작성한
- * 한국어 자연어 분석 리포트(마크다운 없이 일반 문단 위주 권장) 문자열을 반환합니다.
- */
-export async function generateKoreanDiagnosisReport(
-  parsed_specs: Partial<ParsedSpecs>,
-  bottleneck_result: Partial<BottleneckResult>,
-): Promise<string> {
-  const model = getGeminiClient().getGenerativeModel({
-    model: GEMINI_MODEL_ID,
-    systemInstruction: [
-      "당신은 PC 하드웨어·게이밍·생산성 워크로드에 정통한 시스템 분석가입니다.",
-      "사용자에게 전달되는 최종 답변은 반드시 한국어(존댓말)로만 작성합니다.",
-      "입력 JSON에 없는 사실은 추측하지 말고, 일반적인 업그레이드·사용 팁 수준으로만 보완합니다.",
-      "출력은 마크다운 제목·코드블록 없이 읽기 좋은 여러 문단으로 구성합니다.",
-    ].join("\n"),
-  });
-
-  const payload: DiagnosisReportInput = { parsed_specs, bottleneck_result };
-  const userPrompt = [
-    "아래는 한 대의 PC에 대한 파싱된 사양(parsed_specs)과 병목 진단 결과(bottleneck_result)입니다.",
-    "이 데이터를 근거로 다음을 포함한 자연어 리포트를 작성해 주세요.",
-    "1) 사양 요약과 전체적인 성격(대략 어떤 용도에 적합한지)",
-    "2) 병목 부품과 그 이유를 사용자 관점에서 풀어 설명",
-    "3) recommendations가 있으면 우선순위와 기대 효과를 정리",
-    "4) 추가로 점검해 보면 좋은 설정·모니터링 팁(과장 없이)",
-    "",
-    JSON.stringify(payload, null, 2),
-  ].join("\n");
-
-  const result = await model.generateContent({
-    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-    generationConfig: {
-      temperature: 0.55,
-      maxOutputTokens: 4096,
-    },
-  });
-
-  const text = result.response.text();
-  if (!text?.trim()) {
-    throw new Error("Gemini 응답 본문이 비어 있습니다.");
-  }
-  return text.trim();
 }
 
 /**
@@ -176,4 +126,175 @@ export async function analyzeBottleneckFromParsedSpecs(
   };
 
   return { bottleneck_result };
+}
+
+// -------------------------------------------------------
+// 정밀진단 챗봇 — 멀티턴 대화
+// -------------------------------------------------------
+
+export type ChatPart =
+  | { text: string }
+  | { inlineData: { mimeType: string; data: string } };
+
+export type ChatMessage = {
+  role: "user" | "model";
+  parts: ChatPart[];
+};
+
+function buildPreciseDiagnosisSystemInstruction(parsedSpecs: ParsedSpecs | null): string {
+  const specsSection = parsedSpecs
+    ? `사용자의 PC 사양:\n- CPU: ${parsedSpecs.CPU}\n- GPU: ${parsedSpecs.GPU}\n- RAM: ${parsedSpecs.RAM}\n\n`
+    : "";
+
+  return [
+    "당신은 PCFixer의 AI PC 업그레이드 상담사입니다.",
+    "",
+    specsSection,
+    "역할:",
+    "1. dxdiag 정보가 없으면 먼저 dxdiag.txt 업로드를 요청하세요.",
+    "   업로드 받으면 내용을 분석해 사양을 파악하세요.",
+    "",
+    "2. 사양 확인 후 아래 정보를 단계적으로 수집하세요",
+    "   (한 번에 여러 개 묻지 말고 대화하듯 하나씩):",
+    "   - 주 사용 목적(게임/작업/영상편집 등) + 예산",
+    "   - RAM 클럭: wmic memorychip get speed 명령어 결과 요청",
+    "   - 파워서플라이: 케이스 측면 라벨 사진 또는 모델명 직접 입력 안내",
+    "   - 온도 이슈 의심 시: HWiNFO64 스크린샷 업로드 안내",
+    "",
+    "3. 충분한 정보 수집 후 우선순위와 이유를 명확히 한 종합 업그레이드 추천을 제시하세요.",
+    "",
+    "항상 한국어로, 친절하고 대화하듯 답변하세요.",
+  ]
+    .join("\n")
+    .trim();
+}
+
+/**
+ * 정밀진단 멀티턴 메시지를 Gemini에 전송하고 모델 응답 텍스트를 반환합니다.
+ * 이미지 파트(inlineData)를 포함한 messages를 그대로 전달합니다.
+ */
+export async function sendPreciseDiagnosisMessage(
+  messages: ChatMessage[],
+  parsedSpecs: ParsedSpecs | null,
+): Promise<string> {
+  const model = getGeminiClient().getGenerativeModel({
+    model: GEMINI_MODEL_ID,
+    systemInstruction: buildPreciseDiagnosisSystemInstruction(parsedSpecs),
+  });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await model.generateContent({
+    contents: messages as any,
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 4096,
+    },
+  });
+
+  const text = result.response.text();
+  if (!text?.trim()) throw new Error("Gemini 응답이 비어 있습니다.");
+  return text.trim();
+}
+
+// -------------------------------------------------------
+// Google Search Grounding — parts DB 미스 시 벤치마크 검색
+// -------------------------------------------------------
+
+const partGroundingSchema = z.object({
+  found: z.boolean(),
+  canonical_name: z.string().min(1).optional(),
+  benchmark_score: z.number().int().positive().optional(),
+  score_inferred: z.boolean().optional(),
+  specs: z.record(z.unknown()).optional(),
+  source: z.string().optional(),
+});
+
+export type PartGroundingResult = {
+  found: boolean;
+  canonical_name: string | null;
+  benchmark_score: number | null;
+  score_inferred: boolean;
+  specs: Record<string, unknown>;
+  source: string | null;
+};
+
+const NOT_FOUND: PartGroundingResult = {
+  found: false,
+  canonical_name: null,
+  benchmark_score: null,
+  score_inferred: false,
+  specs: {},
+  source: null,
+};
+
+/**
+ * Google Search Grounding으로 부품의 PassMark 점수와 스펙을 검색합니다.
+ * DB에서 해당 부품을 찾지 못했을 때 호출됩니다.
+ */
+export async function searchPartBenchmarkWithGrounding(
+  partName: string,
+  category: "CPU" | "GPU",
+): Promise<PartGroundingResult> {
+  try {
+    const model = getGeminiClient().getGenerativeModel({
+      model: GEMINI_MODEL_ID,
+      // googleSearch는 Gemini 2.x 전용 grounding 도구입니다.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tools: [{ googleSearch: {} }] as any,
+    });
+
+    const schemaHint = `{
+  "found": true,
+  "canonical_name": "공식 모델명 (예: Intel Core i5-12400F)",
+  "benchmark_score": 15000,
+  "score_inferred": false,
+  "specs": { "cores": 6, "clock_ghz": 2.5, "tdp_w": 65 },
+  "source": "https://www.cpubenchmark.net/..."
+}`;
+
+    const prompt = [
+      `다음 ${category}의 PassMark 벤치마크 점수와 주요 스펙을 검색해서 JSON으로만 반환하세요.`,
+      `부품명: ${partName}`,
+      "",
+      "출력 형식 (마크다운·설명 없이 JSON만):",
+      schemaHint,
+      "",
+      "규칙:",
+      "- PassMark 점수를 직접 찾지 못하면 유사 제품군 대비 추정값을 넣고 score_inferred: true로 설정",
+      "- 정보를 전혀 찾지 못하면 { \"found\": false } 만 반환",
+    ].join("\n");
+
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 1024,
+      },
+    });
+
+    const text = result.response.text();
+    if (!text?.trim()) return NOT_FOUND;
+
+    let parsed: unknown;
+    try {
+      parsed = extractJsonFromModelText(text);
+    } catch {
+      return NOT_FOUND;
+    }
+
+    const decoded = partGroundingSchema.safeParse(parsed);
+    if (!decoded.success || !decoded.data.found) return NOT_FOUND;
+
+    const d = decoded.data;
+    return {
+      found: true,
+      canonical_name: d.canonical_name ?? partName,
+      benchmark_score: d.benchmark_score ?? null,
+      score_inferred: d.score_inferred ?? false,
+      specs: (d.specs ?? {}) as Record<string, unknown>,
+      source: d.source ?? null,
+    };
+  } catch {
+    return NOT_FOUND;
+  }
 }

@@ -13,13 +13,15 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
+import { searchPartBenchmarkWithGrounding } from "@/lib/gemini";
 
 type DbClient = SupabaseClient<Database>;
 
 /** `computePercentileAndGradeFromParts` 반환 형태 — DB `diagnoses` 컬럼과 동일 의미 */
 export type RankPercentileFromPartsResult = {
-  percentile_rank: number;
-  rank_grade: string;
+  /** null = 두 부품 모두 정보를 찾지 못한 경우 (진단불가) */
+  percentile_rank: number | null;
+  rank_grade: string | null;
 };
 
 // -------------------------------------------------------
@@ -80,7 +82,47 @@ export function gradeFromPercentile(percentile: number): string {
 // -------------------------------------------------------
 // 4. 부품명 → parts 테이블에서 benchmark_score 조회
 //    aliases 배열 포함 부분 문자열 매칭 (가장 길게 겹치는 후보 우선)
+//    DB 미스 시 Gemini Search Grounding으로 폴백
 // -------------------------------------------------------
+
+function extractBrand(name: string): string | null {
+  if (/intel/i.test(name)) return "Intel";
+  if (/amd|ryzen|epyc/i.test(name)) return "AMD";
+  if (/nvidia|geforce|rtx|gtx|quadro/i.test(name)) return "NVIDIA";
+  return null;
+}
+
+async function findByGrounding(
+  supabase: DbClient,
+  partName: string,
+  category: "CPU" | "GPU",
+): Promise<number | null> {
+  const result = await searchPartBenchmarkWithGrounding(partName, category);
+  if (!result.found || result.benchmark_score == null) return null;
+
+  const canonicalName = result.canonical_name ?? partName;
+
+  // fire-and-forget: 실패해도 진단 흐름을 막지 않음
+  supabase
+    .from("parts")
+    .insert({
+      name: canonicalName,
+      aliases: canonicalName !== partName ? [partName] : null,
+      category,
+      brand: extractBrand(canonicalName),
+      benchmark_score: result.benchmark_score,
+      specs: {
+        ...result.specs,
+        score_source: result.score_inferred ? "gemini_inferred" : "gemini_grounding",
+        source_url: result.source,
+      },
+    })
+    .then(({ error }) => {
+      if (error) console.error("[parts] Grounding 결과 저장 실패:", error.message);
+    });
+
+  return result.benchmark_score;
+}
 
 async function findBenchmarkScore(
   supabase: DbClient,
@@ -95,14 +137,11 @@ async function findBenchmarkScore(
     .ilike("category", category)
     .not("benchmark_score", "is", null);
 
-    if (error || !data || data.length === 0) {
-      console.log('[rank] parts 쿼리 실패', { error, dataLength: data?.length });
-      return null;
-    }
-    console.log('[rank] parts 조회됨', data.length, '개');
+  if (error || !data || data.length === 0) {
+    return findByGrounding(supabase, partName, category);
+  }
 
   const normalized = partName.toLowerCase();
-
   let bestMatch: { score: number; matchLength: number } | null = null;
 
   for (const part of data) {
@@ -124,8 +163,11 @@ async function findBenchmarkScore(
       }
     }
   }
-  console.log('[rank]', category, partName, '→', bestMatch);
-  return bestMatch ? bestMatch.score : null;
+
+  if (bestMatch) return bestMatch.score;
+
+  // DB에 데이터는 있지만 이 부품과 매칭되는 항목 없음 → Grounding 시도
+  return findByGrounding(supabase, partName, category);
 }
 
 // -------------------------------------------------------
@@ -136,7 +178,6 @@ export async function computePercentileAndGradeFromParts(
   supabase: DbClient,
   parsedSpecs: { CPU?: string; GPU?: string; RAM?: string },
 ): Promise<RankPercentileFromPartsResult> {
-  console.log('[rank] 함수 진입', parsedSpecs);
   const [cpuScore, gpuScore] = await Promise.all([
     parsedSpecs.CPU ? findBenchmarkScore(supabase, parsedSpecs.CPU, "CPU") : null,
     parsedSpecs.GPU ? findBenchmarkScore(supabase, parsedSpecs.GPU, "GPU") : null,
@@ -146,8 +187,8 @@ export async function computePercentileAndGradeFromParts(
 
   const gpuPercentile = gpuScore != null ? scoreToPercentile(gpuScore, GPU_THRESHOLDS) : null;
 
-  // 둘 다 있으면 평균, 하나만 있으면 그쪽만, 둘 다 없으면 50 fallback
-  let percentile_rank: number;
+  // 둘 다 있으면 평균, 하나만 있으면 그쪽만, 둘 다 없으면 null (진단불가)
+  let percentile_rank: number | null;
   if (cpuPercentile != null && gpuPercentile != null) {
     percentile_rank = Math.round((cpuPercentile + gpuPercentile) / 2);
   } else if (cpuPercentile != null) {
@@ -155,10 +196,10 @@ export async function computePercentileAndGradeFromParts(
   } else if (gpuPercentile != null) {
     percentile_rank = gpuPercentile;
   } else {
-    percentile_rank = 50; // 매칭 실패 fallback
+    percentile_rank = null;
   }
 
-  const rank_grade = gradeFromPercentile(percentile_rank);
+  const rank_grade = percentile_rank != null ? gradeFromPercentile(percentile_rank) : null;
 
   return { percentile_rank, rank_grade };
 }

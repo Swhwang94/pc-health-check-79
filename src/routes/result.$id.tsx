@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { BottleneckResult, ParsedSpecs, Recommendation } from "@/lib/fake-diagnosis";
+import type { BottleneckResult, ParsedSpecs, Recommendation } from "@/lib/diagnosis-types";
 
 type DiagnosisRow = {
   parsed_specs?: unknown;
@@ -126,17 +126,31 @@ function Result() {
         <div className="relative flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm text-muted-foreground">
-              parts DB 벤치마크 기준 · 카탈로그 내 상대 순위 (추정)
+              {percentileDisplay != null
+                ? "PassMark 벤치마크 기준 · 카탈로그 내 상대 순위 (추정)"
+                : "부품 정보를 찾을 수 없어 순위를 산출할 수 없습니다"}
             </p>
-            <p className="mt-2 text-5xl font-bold tracking-tight md:text-6xl">
-              상위{" "}
-              <span className="bg-gradient-to-r from-primary to-[var(--accent2)] bg-clip-text text-transparent">
-                {percentileDisplay != null ? `${100 - percentileDisplay}` : "-"}%
-              </span>
-            </p>
+            {percentileDisplay != null ? (
+              <p className="mt-2 text-5xl font-bold tracking-tight md:text-6xl">
+                상위{" "}
+                <span className="bg-gradient-to-r from-primary to-[var(--accent2)] bg-clip-text text-transparent">
+                  {100 - percentileDisplay}%
+                </span>
+              </p>
+            ) : (
+              <p className="mt-2 text-4xl font-bold tracking-tight text-muted-foreground">
+                진단불가
+              </p>
+            )}
           </div>
-          <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-[var(--success)]/15 text-5xl font-bold text-[var(--success)] ring-2 ring-[var(--success)]/30">
-            {gradeDisplay ?? "?"}
+          <div
+            className={`flex h-24 w-24 items-center justify-center rounded-2xl text-5xl font-bold ring-2 ${
+              gradeDisplay != null
+                ? "bg-[var(--success)]/15 text-[var(--success)] ring-[var(--success)]/30"
+                : "bg-muted text-muted-foreground ring-muted/30"
+            }`}
+          >
+            {gradeDisplay ?? "—"}
           </div>
         </div>
       </section>

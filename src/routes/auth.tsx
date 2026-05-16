@@ -3,6 +3,9 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/auth";
 
 export const Route = createFileRoute("/auth")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    redirect: typeof search.redirect === "string" ? search.redirect : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "로그인 — PCFixer" },
@@ -16,6 +19,7 @@ type Tab = "login" | "signup";
 
 function AuthPage() {
   const navigate = useNavigate();
+  const { redirect } = Route.useSearch();
   const { user, loading, signInWithEmail, signUpWithEmail, signInWithGoogle } = useAuth();
   const [tab, setTab] = useState<Tab>("login");
   const [email, setEmail] = useState("");
@@ -26,9 +30,13 @@ function AuthPage() {
 
   useEffect(() => {
     if (!loading && user) {
-      navigate({ to: "/" });
+      if (redirect) {
+        window.location.replace(redirect);
+      } else {
+        navigate({ to: "/" });
+      }
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, redirect]);
 
   const switchTab = (t: Tab) => {
     setTab(t);

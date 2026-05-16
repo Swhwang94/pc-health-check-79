@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getSessionId } from "@/lib/session";
 import { isDxdiagSpecsUsable, parseDxdiagSpecs } from "@/lib/dxdiag-parse";
 import { analyzeBottleneckFromParsedSpecs } from "@/lib/gemini";
-import type { BottleneckResult } from "@/lib/fake-diagnosis";
+import type { BottleneckResult } from "@/lib/diagnosis-types";
 import { computePercentileAndGradeFromParts } from "@/lib/rank-percentile";
 import { useAuth } from "@/contexts/auth";
 
@@ -75,8 +75,8 @@ function Diagnose() {
 
       const bottleneck_result: BottleneckResult = {
         ...aiBottleneck,
-        percentile_rank: rankMeta.percentile_rank,
-        rank_grade: rankMeta.rank_grade,
+        percentile_rank: rankMeta.percentile_rank ?? undefined,
+        rank_grade: rankMeta.rank_grade ?? undefined,
       };
 
       // 2. Insert diagnosis row

@@ -8,6 +8,7 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { AuthProvider, useAuth } from "@/contexts/auth";
 
 import appCss from "../styles.css?url";
@@ -77,6 +78,7 @@ function UserMenu() {
     return (
       <Link
         to="/auth"
+        search={{ redirect: undefined }}
         className="rounded-lg border border-border bg-card/50 px-3 py-1.5 text-sm font-medium text-foreground transition hover:bg-card hover:border-primary/40"
       >
         로그인
@@ -119,14 +121,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "PCFixer — AI 기반 PC 성능 진단" },
+      { name: "description", content: "AI 기반 PC 성능 진단 서비스. dxdiag 파일 하나로 병목을 진단하고 업그레이드 부품을 추천받으세요." },
+      { property: "og:title", content: "PCFixer — AI 기반 PC 성능 진단" },
+      { property: "og:description", content: "AI 기반 PC 성능 진단 서비스" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
       {
@@ -157,6 +157,16 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    const prevent = (e: DragEvent) => e.preventDefault();
+    document.addEventListener("dragover", prevent);
+    document.addEventListener("drop", prevent);
+    return () => {
+      document.removeEventListener("dragover", prevent);
+      document.removeEventListener("drop", prevent);
+    };
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

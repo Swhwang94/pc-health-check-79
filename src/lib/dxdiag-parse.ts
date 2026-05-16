@@ -1,4 +1,4 @@
-import type { ParsedSpecs } from "@/lib/fake-diagnosis";
+import type { ParsedSpecs } from "@/lib/diagnosis-types";
 
 function pickPrimaryGpu(candidates: string[]): string {
   const cleaned = [...new Set(candidates.map((c) => c.trim()).filter(Boolean))];

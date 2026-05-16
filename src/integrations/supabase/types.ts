@@ -14,6 +14,50 @@ export type Database = {
   }
   public: {
     Tables: {
+      chat_sessions: {
+        Row: {
+          id: string
+          user_id: string
+          diagnosis_id: string | null
+          messages: Json
+          goal: string | null
+          main_issue: string | null
+          budget: number | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          diagnosis_id?: string | null
+          messages?: Json
+          goal?: string | null
+          main_issue?: string | null
+          budget?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          diagnosis_id?: string | null
+          messages?: Json
+          goal?: string | null
+          main_issue?: string | null
+          budget?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_sessions_diagnosis_id_fkey"
+            columns: ["diagnosis_id"]
+            isOneToOne: false
+            referencedRelation: "diagnoses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       diagnoses: {
         Row: {
           bottleneck_result: Json | null

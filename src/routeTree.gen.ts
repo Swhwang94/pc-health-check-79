@@ -9,12 +9,18 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as DiagnoseProRouteImport } from './routes/diagnose-pro'
 import { Route as DiagnoseRouteImport } from './routes/diagnose'
 import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ResultIdRouteImport } from './routes/result.$id'
 
+const DiagnoseProRoute = DiagnoseProRouteImport.update({
+  id: '/diagnose-pro',
+  path: '/diagnose-pro',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DiagnoseRoute = DiagnoseRouteImport.update({
   id: '/diagnose',
   path: '/diagnose',
@@ -46,6 +52,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/callback': typeof CallbackRoute
   '/diagnose': typeof DiagnoseRoute
+  '/diagnose-pro': typeof DiagnoseProRoute
   '/result/$id': typeof ResultIdRoute
 }
 export interface FileRoutesByTo {
@@ -53,6 +60,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/callback': typeof CallbackRoute
   '/diagnose': typeof DiagnoseRoute
+  '/diagnose-pro': typeof DiagnoseProRoute
   '/result/$id': typeof ResultIdRoute
 }
 export interface FileRoutesById {
@@ -61,14 +69,34 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/callback': typeof CallbackRoute
   '/diagnose': typeof DiagnoseRoute
+  '/diagnose-pro': typeof DiagnoseProRoute
   '/result/$id': typeof ResultIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/callback' | '/diagnose' | '/result/$id'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/callback'
+    | '/diagnose'
+    | '/diagnose-pro'
+    | '/result/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/callback' | '/diagnose' | '/result/$id'
-  id: '__root__' | '/' | '/auth' | '/callback' | '/diagnose' | '/result/$id'
+  to:
+    | '/'
+    | '/auth'
+    | '/callback'
+    | '/diagnose'
+    | '/diagnose-pro'
+    | '/result/$id'
+  id:
+    | '__root__'
+    | '/'
+    | '/auth'
+    | '/callback'
+    | '/diagnose'
+    | '/diagnose-pro'
+    | '/result/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -76,11 +104,19 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   CallbackRoute: typeof CallbackRoute
   DiagnoseRoute: typeof DiagnoseRoute
+  DiagnoseProRoute: typeof DiagnoseProRoute
   ResultIdRoute: typeof ResultIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/diagnose-pro': {
+      id: '/diagnose-pro'
+      path: '/diagnose-pro'
+      fullPath: '/diagnose-pro'
+      preLoaderRoute: typeof DiagnoseProRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/diagnose': {
       id: '/diagnose'
       path: '/diagnose'
@@ -124,6 +160,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   CallbackRoute: CallbackRoute,
   DiagnoseRoute: DiagnoseRoute,
+  DiagnoseProRoute: DiagnoseProRoute,
   ResultIdRoute: ResultIdRoute,
 }
 export const routeTree = rootRouteImport

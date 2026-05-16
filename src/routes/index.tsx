@@ -1,4 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useAuth } from "@/contexts/auth";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -20,6 +21,17 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  const handlePreciseDiagnose = () => {
+    if (user) {
+      navigate({ to: "/diagnose-pro" });
+    } else {
+      navigate({ to: "/auth", search: { redirect: "/diagnose-pro" } });
+    }
+  };
+
   return (
     <main className="relative flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center px-6 text-center">
       <div className="absolute left-1/2 top-1/3 -z-10 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/20 blur-[120px]" />
@@ -36,15 +48,23 @@ function Home() {
         dxdiag 파일 하나로 30초 만에 내 PC 병목 진단 + 업그레이드 추천
       </p>
 
-      <Link
-        to="/diagnose"
-        className="mt-10 inline-flex items-center gap-2 rounded-xl bg-primary px-8 py-4 text-lg font-semibold text-primary-foreground shadow-lg shadow-primary/30 transition hover:scale-[1.02] hover:bg-primary/90"
-      >
-        내 PC 진단하기 <span aria-hidden>→</span>
-      </Link>
+      <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+        <Link
+          to="/diagnose"
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-8 py-4 text-lg font-semibold text-primary-foreground shadow-lg shadow-primary/30 transition hover:scale-[1.02] hover:bg-primary/90"
+        >
+          빠른진단 <span aria-hidden>→</span>
+        </Link>
+        <button
+          onClick={handlePreciseDiagnose}
+          className="inline-flex items-center gap-2 rounded-xl border-2 border-primary px-8 py-4 text-lg font-semibold text-primary transition hover:scale-[1.02] hover:bg-primary/10"
+        >
+          정밀진단 <span aria-hidden className="text-sm opacity-70">(AI 상담)</span>
+        </button>
+      </div>
 
       <p className="mt-8 text-sm text-muted-foreground">
-        설치 없음 · 회원가입 없음 · 무료
+        설치 없음 · 무료 · 정밀진단은 로그인 필요
       </p>
     </main>
   );
